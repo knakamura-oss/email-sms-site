@@ -78,7 +78,14 @@
                     if (data.templates) saveTemplates(data.templates);
                     alert(`✅ 読み込み完了\n配信: ${data.campaigns?.length||0}件\nテンプレート: ${data.templates?.length||0}件`);
                 } catch (error) {
-                    alert('❌ 読み込み失敗\n' + error.message);
+                    try {
+                        const data = await callJsonp(spreadsheetUrl);
+                        if (data.campaigns) saveCampaigns(data.campaigns);
+                        if (data.templates) saveTemplates(data.templates);
+                        alert(`✅ 読み込み完了\n配信: ${data.campaigns?.length||0}件\nテンプレート: ${data.templates?.length||0}件`);
+                    } catch (fallbackError) {
+                        alert('❌ 読み込み失敗\n' + fallbackError.message);
+                    }
                 } finally {
                     setIsLoading(false);
                 }
@@ -101,6 +108,33 @@
                 }
             };
 
+            const callJsonp = (url, params = {}) => new Promise((resolve, reject) => {
+                const callbackName = '__jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+                const qp = new URLSearchParams({ ...params, callback: callbackName }).toString();
+                const join = url.includes('?') ? '&' : '?';
+                const script = document.createElement('script');
+                const cleanup = () => {
+                    try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
+                    if (script.parentNode) script.parentNode.removeChild(script);
+                };
+                const timer = setTimeout(() => {
+                    cleanup();
+                    reject(new Error('JSONP timeout'));
+                }, 15000);
+                window[callbackName] = (payload) => {
+                    clearTimeout(timer);
+                    cleanup();
+                    resolve(payload || {});
+                };
+                script.onerror = () => {
+                    clearTimeout(timer);
+                    cleanup();
+                    reject(new Error('JSONP failed'));
+                };
+                script.src = `${url}${join}${qp}`;
+                document.body.appendChild(script);
+            });
+
             const loadRecipientsFromSpreadsheet = async () => {
                 if (!spreadsheetUrl) {
                     alert('スプレッドシートのURLを設定してください');
@@ -120,34 +154,8 @@
                         alert('スプレッドシートに宛先が見つかりません。\n\n「名前」と「メールアドレス」列に宛先を入力してください。');
                     }
                 } catch (error) {
-                    // SafariなどでCORSに失敗する場合はJSONPでフォールバック
                     try {
-                        const data = await new Promise((resolve, reject) => {
-                            const callbackName = '__recipients_jsonp_' + Date.now();
-                            const join = spreadsheetUrl.includes('?') ? '&' : '?';
-                            const src = `${spreadsheetUrl}${join}action=getRecipients&callback=${callbackName}`;
-                            const script = document.createElement('script');
-                            const cleanup = () => {
-                                try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
-                                if (script.parentNode) script.parentNode.removeChild(script);
-                            };
-                            const timer = setTimeout(() => {
-                                cleanup();
-                                reject(new Error('JSONP timeout'));
-                            }, 10000);
-                            window[callbackName] = (payload) => {
-                                clearTimeout(timer);
-                                cleanup();
-                                resolve(payload || {});
-                            };
-                            script.onerror = () => {
-                                clearTimeout(timer);
-                                cleanup();
-                                reject(new Error('JSONP failed'));
-                            };
-                            script.src = src;
-                            document.body.appendChild(script);
-                        });
+                        const data = await callJsonp(spreadsheetUrl, { action: 'getRecipients' });
                         if (data.recipients && data.recipients.length > 0) {
                             setRecipients(data.recipients);
                             alert(`✅ ${data.recipients.length}件の宛先を読み込みました`);
@@ -188,18 +196,21 @@
                 }
                 setIsLoading(true);
                 try {
-                    await fetch(spreadsheetUrl, {
-                        method: 'POST', mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            action: 'sendEmails',
-                            recipients: recipients,
-                            template: selectedTemplate
-                        })
+                    const payload = await callJsonp(spreadsheetUrl, {
+                        action: 'sendEmails',
+                        recipients: JSON.stringify(recipients),
+                        template: JSON.stringify(selectedTemplate)
                     });
+                    if (payload && payload.ok === false) {
+                        throw new Error(payload.error || '送信APIがエラーを返しました');
+                    }
                     alert(`✅ ${recipients.length}件の送信処理を開始しました`);
                     setRecipients([]);
                     setSelectedTemplate(null);
+                    // 送信後に最新状態を即時反映
+                    const latest = await callJsonp(spreadsheetUrl);
+                    if (latest.campaigns) saveCampaigns(latest.campaigns);
+                    if (latest.templates) saveTemplates(latest.templates);
                 } catch (error) {
                     alert('送信失敗: ' + error.message);
                 } finally {
