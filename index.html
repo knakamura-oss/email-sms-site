@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メール・SMS送信＆分析ツール（完全版）</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // アイコン
+        const PlusIcon = () => <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+        const MailIcon = ({size=24}) => <svg width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>;
+        const SendIcon = () => <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
+        const UploadIcon = () => <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
+        const EditIcon = () => <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
+        const TrashIcon = () => <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>;
+        const SaveIcon = () => <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+        const SettingsIcon = () => <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/></svg>;
+        const RefreshIcon = () => <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
+        const EyeIcon = ({size=24}) => <svg width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
+        const ReplyIcon = ({size=24}) => <svg width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>;
+        const TrendingUpIcon = ({size=24}) => <svg width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
+
+        const App = () => {
+            const [campaigns, setCampaigns] = useState([]);
+            const [templates, setTemplates] = useState([]);
+            const [recipients, setRecipients] = useState([]);
+            const [selectedTemplate, setSelectedTemplate] = useState(null);
+            const [showTemplateModal, setShowTemplateModal] = useState(false);
+            const [showSettingsModal, setShowSettingsModal] = useState(false);
+            const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [spreadsheetUrl, setSpreadsheetUrl] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            
+            const [templateFormData, setTemplateFormData] = useState({ name: '', channel: 'email', subject: '', body: '' });
+
+            useEffect(() => {
+                const savedCampaigns = localStorage.getItem('campaigns-data-v5');
+                if (savedCampaigns) setCampaigns(JSON.parse(savedCampaigns));
+                
+                const savedTemplates = localStorage.getItem('email-templates-v5');
+                if (savedTemplates) setTemplates(JSON.parse(savedTemplates));
+                
+                const savedUrl = localStorage.getItem('spreadsheet-api-url');
+                if (savedUrl) setSpreadsheetUrl(savedUrl);
+            }, []);
+
+            const saveCampaigns = (data) => {
+                localStorage.setItem('campaigns-data-v5', JSON.stringify(data));
+                setCampaigns(data);
+            };
+
+            const saveTemplates = (data) => {
+                localStorage.setItem('email-templates-v5', JSON.stringify(data));
+                setTemplates(data);
+            };
+
+            const loadFromSpreadsheet = async () => {
+                if (!spreadsheetUrl) { setShowSettingsModal(true); return; }
+                setIsLoading(true);
+                try {
+                    const response = await fetch(spreadsheetUrl);
+                    const data = await response.json();
+                    if (data.campaigns) saveCampaigns(data.campaigns);
+                    if (data.templates) saveTemplates(data.templates);
+                    alert(`✅ 読み込み完了\n配信: ${data.campaigns?.length||0}件\nテンプレート: ${data.templates?.length||0}件`);
+                } catch (error) {
+                    alert('❌ 読み込み失敗\n' + error.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const syncTemplates = async () => {
+                if (!spreadsheetUrl || templates.length === 0) return;
+                setIsLoading(true);
+                try {
+                    await fetch(spreadsheetUrl, {
+                        method: 'POST', mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ templates: templates })
+                    });
+                    alert(`✅ ${templates.length}件のテンプレートを同期しました`);
+                } catch (error) {
+                    alert('同期エラー: ' + error.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const loadRecipientsFromSpreadsheet = async () => {
+                if (!spreadsheetUrl) {
+                    alert('スプレッドシートのURLを設定してください');
+                    setShowSettingsModal(true);
+                    return;
+                }
+
+                setIsLoading(true);
+                try {
+                    const response = await fetch(spreadsheetUrl + '?action=getRecipients');
+                    const data = await response.json();
+                    
+                    if (data.recipients && data.recipients.length > 0) {
+                        setRecipients(data.recipients);
+                        alert(`✅ ${data.recipients.length}件の宛先を読み込みました`);
+                    } else {
+                        alert('スプレッドシートに宛先が見つかりません。\n\n「名前」と「メールアドレス」列に宛先を入力してください。');
+                    }
+                } catch (error) {
+                    alert('宛先の読み込みに失敗しました\n' + error.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleCSVUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const lines = event.target.result.split('\n');
+                    const parsed = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+                        const [name, email] = line.split(',').map(s => s.trim());
+                        if (name && email) parsed.push({ name, email });
+                    }
+                    setRecipients(parsed);
+                    alert(`${parsed.length}件の宛先を読み込みました`);
+                };
+                reader.readAsText(file);
+            };
+
+            const handleSendEmails = async () => {
+                if (!spreadsheetUrl || recipients.length === 0 || !selectedTemplate) {
+                    alert('設定・宛先・テンプレートを確認してください');
+                    return;
+                }
+                if (!confirm(`${recipients.length}件のメールを送信しますか？`)) return;
+                
+                setIsLoading(true);
+                try {
+                    await fetch(spreadsheetUrl, {
+                        method: 'POST', mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'sendEmails',
+                            recipients: recipients,
+                            template: selectedTemplate
+                        })
+                    });
+                    alert(`✅ ${recipients.length}件の送信リクエストを送信しました`);
+                    setRecipients([]);
+                    setSelectedTemplate(null);
+                } catch (error) {
+                    alert('送信失敗: ' + error.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleTemplateSubmit = (e) => {
+                e.preventDefault();
+                const newTemplate = { ...templateFormData, id: editingTemplateIndex !== null ? templates[editingTemplateIndex].id : Date.now() };
+                const newData = editingTemplateIndex !== null ? templates.map((t, i) => i === editingTemplateIndex ? newTemplate : t) : [...templates, newTemplate];
+                saveTemplates(newData);
+                setShowTemplateModal(false);
+                setTemplateFormData({ name: '', channel: 'email', subject: '', body: '' });
+                setEditingTemplateIndex(null);
+            };
+
+            const metrics = () => {
+                const total = campaigns.reduce((s, c) => s + c.sent, 0);
+                const opened = campaigns.reduce((s, c) => s + c.opened, 0);
+                const replied = campaigns.reduce((s, c) => s + c.replied, 0);
+                return {
+                    total, opened, replied,
+                    openRate: total > 0 ? ((opened / total) * 100).toFixed(1) : '0.0',
+                    replyRate: total > 0 ? ((replied / total) * 100).toFixed(1) : '0.0'
+                };
+            };
+
+            const m = metrics();
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <header className="bg-white border-b px-6 py-4">
+                        <div className="max-w-7xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <MailIcon size={32} />
+                                <h1 className="text-2xl font-bold">メール・SMS送信＆分析ツール</h1>
+                            </div>
+                            <div className="flex space-x-3">
+                                <button onClick={() => setShowSettingsModal(true)} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">設定</button>
+                                <button onClick={syncTemplates} disabled={isLoading} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400">テンプレート同期</button>
+                                <button onClick={loadFromSpreadsheet} disabled={isLoading} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400">{isLoading ? '読込中...' : 'データ読込'}</button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className="bg-white border-b">
+                        <div className="max-w-7xl mx-auto px-6 flex space-x-8">
+                            {[
+                                { key: 'dashboard', label: 'ダッシュボード' },
+                                { key: 'send', label: 'メール送信' },
+                                { key: 'analysis', label: 'テンプレート分析' },
+                                { key: 'templates', label: 'テンプレート管理' },
+                                { key: 'campaigns', label: '配信履歴' }
+                            ].map(tab => (
+                                <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                                    className={`py-4 px-2 border-b-2 font-medium ${activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <main className="max-w-7xl mx-auto p-6">
+                        {activeTab === 'dashboard' && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-5 gap-4">
+                                    {[
+                                        { label: '総送信数', value: m.total, icon: MailIcon, color: 'gray' },
+                                        { label: '総開封数', value: m.opened, icon: EyeIcon, color: 'blue' },
+                                        { label: '総返信数', value: m.replied, icon: ReplyIcon, color: 'green' },
+                                        { label: '開封率', value: `${m.openRate}%`, icon: TrendingUpIcon, color: 'blue' },
+                                        { label: '返信率', value: `${m.replyRate}%`, icon: TrendingUpIcon, color: 'green' }
+                                    ].map((item, i) => {
+                                        const Icon = item.icon;
+                                        const colors = { gray: 'text-gray-800', blue: 'text-blue-600', green: 'text-green-600' };
+                                        return (
+                                            <div key={i} className="bg-white p-6 rounded-lg shadow-sm border">
+                                                <p className="text-gray-500 text-sm mb-2">{item.label}</p>
+                                                <p className={`text-3xl font-bold ${colors[item.color]}`}>{item.value}</p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="bg-white p-6 rounded-lg border">
+                                    <h3 className="text-lg font-semibold mb-4">最新配信</h3>
+                                    {campaigns.length === 0 ? <p className="text-gray-400 text-center py-8">データがありません</p> : (
+                                        <div className="space-y-3">
+                                            {campaigns.slice(0, 5).map(c => {
+                                                const oRate = c.sent > 0 ? ((c.opened / c.sent) * 100).toFixed(1) : 0;
+                                                const rRate = c.sent > 0 ? ((c.replied / c.sent) * 100).toFixed(1) : 0;
+                                                return (
+                                                    <div key={c.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                                                        <div>
+                                                            <p className="font-medium">{c.name}</p>
+                                                            <p className="text-sm text-gray-500">{c.date} • {c.sent}件</p>
+                                                        </div>
+                                                        <div className="flex space-x-4 text-sm">
+                                                            <span className="text-blue-600">開封 {oRate}%</span>
+                                                            <span className="text-green-600">返信 {rRate}%</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'analysis' && (
+                            <div className="space-y-6">
+                                <div className="bg-white rounded-lg border p-6">
+                                    <h2 className="text-xl font-bold mb-4">チャネル別パフォーマンス</h2>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        {['email', 'sms'].map(ch => {
+                                            const filtered = campaigns.filter(c => c.channel === ch);
+                                            const total = filtered.reduce((s, c) => s + c.sent, 0);
+                                            const opened = filtered.reduce((s, c) => s + c.opened, 0);
+                                            const replied = filtered.reduce((s, c) => s + c.replied, 0);
+                                            const oRate = total > 0 ? ((opened / total) * 100).toFixed(1) : '0.0';
+                                            const rRate = total > 0 ? ((replied / total) * 100).toFixed(1) : '0.0';
+                                            
+                                            return (
+                                                <div key={ch} className="border-2 rounded-lg p-6">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <h3 className="text-lg font-semibold">{ch === 'email' ? 'メール' : 'SMS'}</h3>
+                                                        <span className={`px-3 py-1 text-sm rounded-full ${ch === 'email' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>
+                                                            {filtered.length}件の配信
+                                                        </span>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        <div className="flex justify-between text-sm">
+                                                            <span className="text-gray-600">総送信数</span>
+                                                            <span className="font-bold text-lg">{total}</span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex justify-between text-sm mb-2">
+                                                                <span className="text-gray-600">開封率</span>
+                                                                <span className="font-semibold text-blue-600">{oRate}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-gray-200 rounded-full h-3">
+                                                                <div className="bg-blue-600 h-3 rounded-full transition-all" style={{width: `${oRate}%`}}></div>
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex justify-between text-sm mb-2">
+                                                                <span className="text-gray-600">返信率</span>
+                                                                <span className="font-semibold text-green-600">{rRate}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-gray-200 rounded-full h-3">
+                                                                <div className="bg-green-600 h-3 rounded-full transition-all" style={{width: `${rRate}%`}}></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-lg border p-6">
+                                    <h2 className="text-xl font-bold mb-4">テンプレート別パフォーマンス</h2>
+                                    {campaigns.length === 0 ? (
+                                        <p className="text-gray-400 text-center py-8">配信データがありません</p>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead className="bg-gray-50 border-b-2">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">テンプレート</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">チャネル</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">使用回数</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">総送信数</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">平均開封率</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">平均返信率</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y">
+                                                    {(() => {
+                                                        const stats = {};
+                                                        campaigns.forEach(c => {
+                                                            const key = `${c.templateName || c.name}_${c.channel}`;
+                                                            if (!stats[key]) {
+                                                                stats[key] = {
+                                                                    name: c.templateName || c.name,
+                                                                    channel: c.channel,
+                                                                    count: 0,
+                                                                    sent: 0,
+                                                                    opened: 0,
+                                                                    replied: 0
+                                                                };
+                                                            }
+                                                            stats[key].count++;
+                                                            stats[key].sent += c.sent;
+                                                            stats[key].opened += c.opened;
+                                                            stats[key].replied += c.replied;
+                                                        });
+                                                        
+                                                        return Object.values(stats)
+                                                            .sort((a, b) => {
+                                                                const aRate = a.sent > 0 ? a.replied / a.sent : 0;
+                                                                const bRate = b.sent > 0 ? b.replied / b.sent : 0;
+                                                                return bRate - aRate;
+                                                            })
+                                                            .map((s, i) => {
+                                                                const oRate = s.sent > 0 ? ((s.opened / s.sent) * 100).toFixed(1) : '0.0';
+                                                                const rRate = s.sent > 0 ? ((s.replied / s.sent) * 100).toFixed(1) : '0.0';
+                                                                return (
+                                                                    <tr key={i} className="hover:bg-gray-50">
+                                                                        <td className="px-4 py-4">
+                                                                            <span className="font-medium text-gray-900">{s.name}</span>
+                                                                        </td>
+                                                                        <td className="px-4 py-4">
+                                                                            <span className={`px-2 py-1 text-xs rounded-full ${s.channel === 'email' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>
+                                                                                {s.channel === 'email' ? 'メール' : 'SMS'}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-4 text-sm text-gray-700">{s.count}回</td>
+                                                                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">{s.sent}</td>
+                                                                        <td className="px-4 py-4">
+                                                                            <div className="flex items-center space-x-2">
+                                                                                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                                                    <div className="bg-blue-600 h-2 rounded-full" style={{width: `${oRate}%`}}></div>
+                                                                                </div>
+                                                                                <span className="text-sm font-semibold text-blue-600 w-12 text-right">{oRate}%</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-4 py-4">
+                                                                            <div className="flex items-center space-x-2">
+                                                                                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                                                    <div className="bg-green-600 h-2 rounded-full" style={{width: `${rRate}%`}}></div>
+                                                                                </div>
+                                                                                <span className="text-sm font-semibold text-green-600 w-12 text-right">{rRate}%</span>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            });
+                                                    })()}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-white rounded-lg border p-6">
+                                    <h2 className="text-xl font-bold mb-4">パフォーマンスランキング（返信率順）</h2>
+                                    {campaigns.length === 0 ? (
+                                        <p className="text-gray-400 text-center py-8">配信データがありません</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {campaigns
+                                                .filter(c => c.sent > 0)
+                                                .sort((a, b) => {
+                                                    const aRate = a.replied / a.sent;
+                                                    const bRate = b.replied / b.sent;
+                                                    return bRate - aRate;
+                                                })
+                                                .slice(0, 10)
+                                                .map((c, i) => {
+                                                    const rRate = ((c.replied / c.sent) * 100).toFixed(1);
+                                                    const oRate = ((c.opened / c.sent) * 100).toFixed(1);
+                                                    return (
+                                                        <div key={c.id} className="flex items-center p-4 border rounded-lg hover:shadow-md transition">
+                                                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold mr-4">
+                                                                {i + 1}
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <h4 className="font-semibold text-gray-900">{c.name}</h4>
+                                                                <p className="text-sm text-gray-500">{c.date} • {c.sent}件送信</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-lg font-bold text-green-600">{rRate}%</p>
+                                                                <p className="text-xs text-gray-500">返信率</p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'send' && (
+                            <div className="space-y-6">
+                                <div className="bg-white rounded-lg border p-6">
+                                    <h2 className="text-xl font-bold mb-4">1. 宛先リストをアップロード（CSV）</h2>
+                                    <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-4 text-sm">
+                                        <p className="font-semibold mb-2">CSV形式:</p>
+                                        <code className="block bg-white p-2 rounded">名前,メールアドレス<br/>山田太郎,yamada@example.com</code>
+                                    </div>
+                                    <div className="flex space-x-3 mb-4">
+                                        <button onClick={loadRecipientsFromSpreadsheet} disabled={isLoading}
+                                            className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 font-semibold">
+                                            <RefreshIcon />
+                                            <span>スプレッドシートから読み込み</span>
+                                        </button>
+                                        <div className="flex-1">
+                                            <label className="flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer font-semibold">
+                                                <UploadIcon />
+                                                <span>CSVファイル選択</span>
+                                                <input type="file" accept=".csv" onChange={handleCSVUpload} className="hidden" />
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {recipients.length > 0 && <div className="mt-4 bg-green-50 p-4 rounded"><p className="text-green-800 font-semibold">✓ {recipients.length}件読込済</p></div>}
+                                </div>
+
+                                <div className="bg-white rounded-lg border p-6">
+                                    <h2 className="text-xl font-bold mb-4">2. テンプレート選択</h2>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {templates.map(t => (
+                                            <div key={t.id} onClick={() => setSelectedTemplate(t)}
+                                                className={`p-4 border-2 rounded-lg cursor-pointer ${selectedTemplate?.id === t.id ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}>
+                                                <h3 className="font-semibold">{t.name}</h3>
+                                                <p className="text-sm text-gray-600 truncate">{t.subject}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {templates.length === 0 && <p className="text-gray-400 text-center py-8">テンプレートがありません</p>}
+                                </div>
+
+                                <div className="bg-white rounded-lg border p-6">
+                                    <button onClick={handleSendEmails} disabled={isLoading || !selectedTemplate || recipients.length === 0}
+                                        className="w-full py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 text-lg font-semibold">
+                                        {isLoading ? '送信中...' : `${recipients.length}件のメールを送信`}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'templates' && (
+                            <div className="space-y-6">
+                                <div className="flex justify-between">
+                                    <h2 className="text-2xl font-bold">テンプレート管理</h2>
+                                    <button onClick={() => { setEditingTemplateIndex(null); setTemplateFormData({ name: '', channel: 'email', subject: '', body: '' }); setShowTemplateModal(true); }}
+                                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                        <PlusIcon /><span>新規作成</span>
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {templates.map((t, i) => (
+                                        <div key={t.id} className="bg-white border rounded-lg p-6">
+                                            <div className="flex justify-between mb-4">
+                                                <h3 className="text-lg font-semibold">{t.name}</h3>
+                                                <div className="flex space-x-2">
+                                                    <button onClick={() => { setEditingTemplateIndex(i); setTemplateFormData(t); setShowTemplateModal(true); }} className="text-blue-600"><EditIcon /></button>
+                                                    <button onClick={() => { if(confirm('削除?')) saveTemplates(templates.filter((_,idx) => idx !== i)); }} className="text-red-600"><TrashIcon /></button>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2 text-sm">
+                                                <div className="bg-gray-50 p-3 rounded"><p className="text-xs text-gray-500">件名</p><p className="font-medium">{t.subject}</p></div>
+                                                <div className="bg-gray-50 p-3 rounded"><p className="text-xs text-gray-500">本文</p><p className="whitespace-pre-wrap line-clamp-3">{t.body}</p></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'campaigns' && (
+                            <div className="bg-white rounded-lg border">
+                                <div className="p-6">
+                                    <h2 className="text-2xl font-bold mb-4">配信履歴</h2>
+                                    {campaigns.length === 0 ? <p className="text-gray-400 text-center py-8">履歴がありません</p> : (
+                                        <div className="space-y-3">
+                                            {campaigns.map(c => {
+                                                const oRate = c.sent > 0 ? ((c.opened / c.sent) * 100).toFixed(1) : 0;
+                                                const rRate = c.sent > 0 ? ((c.replied / c.sent) * 100).toFixed(1) : 0;
+                                                return (
+                                                    <div key={c.id} className="p-4 border rounded-lg">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div>
+                                                                <h3 className="font-semibold">{c.name}</h3>
+                                                                <p className="text-sm text-gray-500">{c.subject}</p>
+                                                                <p className="text-xs text-gray-400 mt-1">{c.date} • {c.sent}件送信</p>
+                                                            </div>
+                                                            <div className="text-right text-sm">
+                                                                <p className="text-blue-600">開封率 {oRate}%</p>
+                                                                <p className="text-green-600">返信率 {rRate}%</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {showTemplateModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                                <div className="p-6 border-b"><h2 className="text-xl font-semibold">{editingTemplateIndex !== null ? '編集' : '新規作成'}</h2></div>
+                                <form onSubmit={handleTemplateSubmit} className="p-6 space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="block text-sm font-medium mb-1">テンプレート名 *</label>
+                                            <input type="text" required value={templateFormData.name} onChange={(e) => setTemplateFormData({...templateFormData, name: e.target.value})} className="w-full px-3 py-2 border rounded-lg" /></div>
+                                        <div><label className="block text-sm font-medium mb-1">チャネル *</label>
+                                            <select required value={templateFormData.channel} onChange={(e) => setTemplateFormData({...templateFormData, channel: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                                <option value="email">メール</option><option value="sms">SMS</option>
+                                            </select></div>
+                                    </div>
+                                    <div><label className="block text-sm font-medium mb-1">件名 *</label>
+                                        <input type="text" required value={templateFormData.subject} onChange={(e) => setTemplateFormData({...templateFormData, subject: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="{name} で名前挿入" /></div>
+                                    <div><label className="block text-sm font-medium mb-1">本文 *</label>
+                                        <textarea required rows={10} value={templateFormData.body} onChange={(e) => setTemplateFormData({...templateFormData, body: e.target.value})} className="w-full px-3 py-2 border rounded-lg font-mono text-sm" placeholder="{name} で名前挿入" />
+                                        <p className="text-xs text-gray-500 mt-1">{templateFormData.body.length}文字</p></div>
+                                    <div className="flex justify-end space-x-3 pt-4 border-t">
+                                        <button type="button" onClick={() => { setShowTemplateModal(false); setTemplateFormData({ name: '', channel: 'email', subject: '', body: '' }); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
+                                        <button type="submit" className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><SaveIcon /><span>保存</span></button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {showSettingsModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
+                                <h2 className="text-xl font-semibold mb-4">スプレッドシート連携設定</h2>
+                                <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-4 text-sm">Apps Scriptで「デプロイ→ウェブアプリ」公開したURLを入力</div>
+                                <input type="url" value={spreadsheetUrl} onChange={(e) => setSpreadsheetUrl(e.target.value)} className="w-full px-3 py-2 border rounded-lg mb-4" placeholder="https://script.google.com/macros/s/.../exec" />
+                                <div className="flex justify-end space-x-3">
+                                    <button onClick={() => setShowSettingsModal(false)} className="px-4 py-2 border rounded-lg">キャンセル</button>
+                                    <button onClick={() => { localStorage.setItem('spreadsheet-api-url', spreadsheetUrl); setShowSettingsModal(false); alert('保存しました'); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
