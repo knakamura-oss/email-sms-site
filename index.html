@@ -214,7 +214,9 @@
                     // 送信後に最新状態を即時反映
                     const latest = await callJsonp(spreadsheetUrl);
                     if (latest.campaigns) saveCampaigns(latest.campaigns);
-                    if (latest.templates) saveTemplates(latest.templates);
+                    if (Array.isArray(latest.templates) && latest.templates.length > 0) {
+                        saveTemplates(latest.templates);
+                    }
                 } catch (error) {
                     alert('送信失敗: ' + error.message);
                 } finally {
