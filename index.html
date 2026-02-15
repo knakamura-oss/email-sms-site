@@ -75,13 +75,17 @@
                     const response = await fetch(spreadsheetUrl);
                     const data = await response.json();
                     if (data.campaigns) saveCampaigns(data.campaigns);
-                    if (data.templates) saveTemplates(data.templates);
+                    if (Array.isArray(data.templates) && data.templates.length > 0) {
+                        saveTemplates(data.templates);
+                    }
                     alert(`✅ 読み込み完了\n配信: ${data.campaigns?.length||0}件\nテンプレート: ${data.templates?.length||0}件`);
                 } catch (error) {
                     try {
                         const data = await callJsonp(spreadsheetUrl);
                         if (data.campaigns) saveCampaigns(data.campaigns);
-                        if (data.templates) saveTemplates(data.templates);
+                        if (Array.isArray(data.templates) && data.templates.length > 0) {
+                            saveTemplates(data.templates);
+                        }
                         alert(`✅ 読み込み完了\n配信: ${data.campaigns?.length||0}件\nテンプレート: ${data.templates?.length||0}件`);
                     } catch (fallbackError) {
                         alert('❌ 読み込み失敗\n' + fallbackError.message);
