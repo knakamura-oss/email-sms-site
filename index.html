@@ -186,8 +186,6 @@
                     alert('設定・宛先・テンプレートを確認してください');
                     return;
                 }
-                if (!confirm(`${recipients.length}件のメールを送信しますか？`)) return;
-                
                 setIsLoading(true);
                 try {
                     await fetch(spreadsheetUrl, {
@@ -199,7 +197,7 @@
                             template: selectedTemplate
                         })
                     });
-                    alert(`✅ ${recipients.length}件の送信リクエストを送信しました`);
+                    alert(`✅ ${recipients.length}件の送信処理を開始しました`);
                     setRecipients([]);
                     setSelectedTemplate(null);
                 } catch (error) {
