@@ -44,6 +44,7 @@
             const [activeTab, setActiveTab] = useState('dashboard');
             const [spreadsheetUrl, setSpreadsheetUrl] = useState('');
             const [isLoading, setIsLoading] = useState(false);
+            const [summary, setSummary] = useState(null);
             
             const [templateFormData, setTemplateFormData] = useState({ name: '', channel: 'email', subject: '', body: '' });
 
@@ -78,6 +79,7 @@
                     if (Array.isArray(data.templates) && data.templates.length > 0) {
                         saveTemplates(data.templates);
                     }
+                    if (data.summary) setSummary(data.summary);
                     alert(`✅ 読み込み完了\n配信: ${data.campaigns?.length||0}件\nテンプレート: ${data.templates?.length||0}件`);
                 } catch (error) {
                     try {
@@ -86,6 +88,7 @@
                         if (Array.isArray(data.templates) && data.templates.length > 0) {
                             saveTemplates(data.templates);
                         }
+                        if (data.summary) setSummary(data.summary);
                         alert(`✅ 読み込み完了\n配信: ${data.campaigns?.length||0}件\nテンプレート: ${data.templates?.length||0}件`);
                     } catch (fallbackError) {
                         alert('❌ 読み込み失敗\n' + fallbackError.message);
@@ -217,6 +220,7 @@
                     if (Array.isArray(latest.templates) && latest.templates.length > 0) {
                         saveTemplates(latest.templates);
                     }
+                    if (latest.summary) setSummary(latest.summary);
                 } catch (error) {
                     alert('送信失敗: ' + error.message);
                 } finally {
@@ -235,9 +239,9 @@
             };
 
             const metrics = () => {
-                const total = campaigns.reduce((s, c) => s + c.sent, 0);
-                const opened = campaigns.reduce((s, c) => s + c.opened, 0);
-                const replied = campaigns.reduce((s, c) => s + c.replied, 0);
+                const total = summary?.sent ?? campaigns.reduce((s, c) => s + c.sent, 0);
+                const opened = summary?.opened ?? campaigns.reduce((s, c) => s + c.opened, 0);
+                const replied = summary?.replied ?? campaigns.reduce((s, c) => s + c.replied, 0);
                 return {
                     total, opened, replied,
                     openRate: total > 0 ? ((opened / total) * 100).toFixed(1) : '0.0',
